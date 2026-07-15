@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
+const API_BASE = '/api'
+const AUTH_STORAGE_KEY = 'sentryVisionAuth'
+
 const navItems = [
   { id: 'dashboard', label: 'Live Dashboard', icon: 'LD' },
   { id: 'alerts', label: 'Alerts/Incidents', icon: 'AI' },
@@ -186,6 +189,21 @@ function App() {
     notifySirens: false,
     retentionDays: 30,
   })
+  const [auth, setAuth] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('sentryVisionAuth')
+      return saved ? JSON.parse(saved) : { token: null, user: null }
+    } catch {
+      return { token: null, user: null }
+    }
+  })
+  const [loginUsername, setLoginUsername] = useState('admin')
+  const [loginPassword, setLoginPassword] = useState('Password123!')
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+
+  const isAuthenticated = Boolean(auth?.token)
+  const authHeaders = auth?.token ? { Authorization: `Bearer ${auth.token}` } : {}
 
   const isAdmin = role === 'Admin'
   const pendingCount = alerts.filter((alert) => alert.status === 'pending').length
@@ -193,6 +211,105 @@ function App() {
   const filteredAlerts = alerts.filter(
     (alert) => alertFilter === 'all' || alert.status === alertFilter,
   )
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return undefined
+    }
+
+    const controller = new AbortController()
+    const signal = controller.signal
+
+    async function loadBackendData() {
+      try {
+        const [alertsResponse, personsResponse] = await Promise.all([
+          fetch(`${API_BASE}/alerts/`, { headers: { 'Content-Type': 'application/json', ...authHeaders }, signal }),
+          fetch(`${API_BASE}/persons/`, { headers: { 'Content-Type': 'application/json', ...authHeaders }, signal }),
+        ])
+
+        if (!alertsResponse.ok || !personsResponse.ok) {
+          throw new Error('Failed to load backend data')
+        }
+
+        const fetchedAlerts = await alertsResponse.json()
+        const fetchedPersons = await personsResponse.json()
+
+        setAlerts(
+          fetchedAlerts.map((alert) => ({
+            id: alert.id,
+            status: alert.acknowledged ? 'confirmed' : 'pending',
+            severity: alert.severity,
+            title: alert.message || alert.source,
+            zone: alert.zone || 'Unknown',
+            confidence: 0,
+            timestamp: new Date(alert.created_at).toLocaleString(),
+            servoAngle: 0,
+            camera: alert.person_name || 'N/A',
+            radar: alert.source,
+            imageTone: alert.severity === 'critical' ? 'red' : alert.severity === 'high' ? 'amber' : 'blue',
+          })),
+        )
+
+        setPersons(
+          fetchedPersons.map((person) => ({
+            id: person.id,
+            name: person.full_name,
+            threat: person.threat_level,
+            notes: person.notes,
+            lastSeen: 'Unknown',
+            confidence: 0,
+            photo: person.photo || '',
+          })),
+        )
+      } catch (error) {
+        console.error('Backend data load failed', error)
+      }
+    }
+
+    loadBackendData()
+    return () => controller.abort()
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!auth?.token) {
+      window.localStorage.removeItem('sentryVisionAuth')
+      return
+    }
+
+    window.localStorage.setItem('sentryVisionAuth', JSON.stringify(auth))
+  }, [auth])
+
+  async function handleLogin(event) {
+    event.preventDefault()
+    setLoginLoading(true)
+    setLoginError('')
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/login/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || 'Login failed')
+      }
+
+      const data = await response.json()
+      setAuth({ token: data.access, user: { username: loginUsername, role: 'Admin' } })
+    } catch (error) {
+      setLoginError(error.message)
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  function handleLogout() {
+    setAuth({ token: null, user: null })
+    setAlerts(initialAlerts)
+    setPersons(initialPersons)
+  }
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -216,6 +333,43 @@ function App() {
     () => navItems.find((item) => item.id === activePage)?.label ?? 'Dashboard',
     [activePage],
   )
+
+  if (!isAuthenticated) {
+    return (
+      <div className="login-shell">
+        <section className="login-panel">
+          <h1>SENTRY-VISION Login</h1>
+          <p>Use the backend admin account to connect frontend and backend.</p>
+          <form onSubmit={handleLogin}>
+            <label>
+              Username
+              <input
+                value={loginUsername}
+                onChange={(event) => setLoginUsername(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                required
+              />
+            </label>
+            <button className="primary-button" type="submit" disabled={loginLoading}>
+              {loginLoading ? 'Logging in…' : 'Log in'}
+            </button>
+            {loginError && <p className="error-text">{loginError}</p>}
+          </form>
+          <p>
+            Demo credentials: <strong>admin / Password123!</strong>
+          </p>
+        </section>
+      </div>
+    )
+  }
 
   function updateAlertStatus(alertId, status) {
     setAlerts((current) =>
