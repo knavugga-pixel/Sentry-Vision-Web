@@ -176,6 +176,8 @@ function App() {
   const [expandedAlert, setExpandedAlert] = useState('INC-1048')
   const [alertFilter, setAlertFilter] = useState('all')
   const [persons, setPersons] = useState(initialPersons)
+  const [devices, setDevices] = useState(deviceHealth)
+  const [analyticsData, setAnalyticsData] = useState(analytics)
   const [editingPerson, setEditingPerson] = useState(null)
   const [personDraft, setPersonDraft] = useState(blankPerson)
   const [radarPulse, setRadarPulse] = useState(68)
@@ -222,17 +224,23 @@ function App() {
 
     async function loadBackendData() {
       try {
-        const [alertsResponse, personsResponse] = await Promise.all([
+        const [alertsResponse, personsResponse, devicesResponse, analyticsResponse] = await Promise.all([
           fetch(`${API_BASE}/alerts/`, { headers: { 'Content-Type': 'application/json', ...authHeaders }, signal }),
           fetch(`${API_BASE}/persons/`, { headers: { 'Content-Type': 'application/json', ...authHeaders }, signal }),
+          fetch(`${API_BASE}/devices/`, { headers: { 'Content-Type': 'application/json', ...authHeaders }, signal }),
+          fetch(`${API_BASE}/analytics/summary/?days=7`, { headers: { 'Content-Type': 'application/json', ...authHeaders }, signal }),
         ])
 
-        if (!alertsResponse.ok || !personsResponse.ok) {
+        if (!alertsResponse.ok || !personsResponse.ok || !devicesResponse.ok || !analyticsResponse.ok) {
           throw new Error('Failed to load backend data')
         }
 
-        const fetchedAlerts = await alertsResponse.json()
-        const fetchedPersons = await personsResponse.json()
+        const [fetchedAlerts, fetchedPersons, fetchedDevices, analyticsSummary] = await Promise.all([
+          alertsResponse.json(),
+          personsResponse.json(),
+          devicesResponse.json(),
+          analyticsResponse.json(),
+        ])
 
         setAlerts(
           fetchedAlerts.map((alert) => ({
@@ -261,6 +269,34 @@ function App() {
             photo: person.photo || '',
           })),
         )
+
+        setDevices(
+          fetchedDevices.map((device) => ({
+            name: device.label || device.device_id,
+            status: device.is_online ? 'online' : 'offline',
+            heartbeat: device.last_seen ? new Date(device.last_seen).toLocaleString() : 'Unknown',
+            firmwareVersion: device.firmware_version || 'Unknown',
+            ipAddress: device.ip_address || 'Unknown',
+            sd: device.sd_card_usage_pct,
+            temp:
+              device.device_type === 'esp32_cam'
+                ? 'ESP32-CAM'
+                : device.device_type === 'ruview_radar'
+                ? 'Radar node'
+                : 'Sensor node',
+          })),
+        )
+
+        setAnalyticsData({
+          detections: analyticsSummary.detections_per_day.map((item) => item.count),
+          weekly: analyticsSummary.alert_counts_by_severity.map((item) => item.count),
+          zones: analyticsSummary.busiest_zones.map((item) => ({ label: item.zone, value: item.count })),
+          times: analyticsSummary.busiest_times.map((item) => ({
+            label: `${String(item.hour).padStart(2, '0')}:00`,
+            value: item.count,
+          })),
+          falsePositiveRate: analyticsSummary.false_positive_rate ?? 0,
+        })
       } catch (error) {
         console.error('Backend data load failed', error)
       }
@@ -296,8 +332,10 @@ function App() {
         throw new Error(data.detail || 'Login failed')
       }
 
-      const data = await response.json()
-      setAuth({ token: data.access, user: { username: loginUsername, role: 'Admin' } })
+        const data = await response.json()
+      const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin'
+      setRole(normalizedRole)
+      setAuth({ token: data.access, user: { username: data.username, role: data.role } })
     } catch (error) {
       setLoginError(error.message)
     } finally {
@@ -309,6 +347,8 @@ function App() {
     setAuth({ token: null, user: null })
     setAlerts(initialAlerts)
     setPersons(initialPersons)
+    setDevices(deviceHealth)
+    setAnalyticsData(analytics)
   }
 
   useEffect(() => {
@@ -949,9 +989,9 @@ function DeviceHealthPage({ devices }) {
             <span className={`status-dot ${device.status}`}>{device.status}</span>
           </div>
           <div className="health-metrics">
-            <DetailItem label="Last heartbeat" value={device.heartbeat} />
-            <DetailItem label="Power status" value={device.power} />
-            <DetailItem label="Temperature" value={device.temp} />
+            <DetailItem label="Last seen" value={device.heartbeat} />
+            <DetailItem label="Firmware" value={device.firmwareVersion} />
+            <DetailItem label="IP address" value={device.ipAddress} />
             {device.sd === null ? (
               <DetailItem label="SD card usage" value="Not installed" />
             ) : (
