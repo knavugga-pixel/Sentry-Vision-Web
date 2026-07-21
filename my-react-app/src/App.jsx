@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_BASE = '/api'
+const API_BASE = 'https://sentry-vision-backend.onrender.com'
 const AUTH_STORAGE_KEY = 'sentryVisionAuth'
 
 const navItems = [
@@ -282,8 +282,8 @@ function App() {
               device.device_type === 'esp32_cam'
                 ? 'ESP32-CAM'
                 : device.device_type === 'ruview_radar'
-                ? 'Radar node'
-                : 'Sensor node',
+                  ? 'Radar node'
+                  : 'Sensor node',
           })),
         )
 
@@ -332,7 +332,7 @@ function App() {
         throw new Error(data.detail || 'Login failed')
       }
 
-        const data = await response.json()
+      const data = await response.json()
       const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin'
       setRole(normalizedRole)
       setAuth({ token: data.access, user: { username: data.username, role: data.role } })
