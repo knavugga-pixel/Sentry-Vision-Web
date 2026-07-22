@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_BASE = 'https://sentry-vision-backend.onrender.com'
+const API_BASE = "https://sentry-vision-backend.onrender.com/api";
 const AUTH_STORAGE_KEY = 'sentryVisionAuth'
 
 const navItems = [
@@ -316,30 +316,34 @@ function App() {
   }, [auth])
 
   async function handleLogin(event) {
-    event.preventDefault()
-    setLoginLoading(true)
-    setLoginError('')
+    event.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
 
     try {
-      const response = await fetch(`${API_BASE}/auth/login/`, {
+      // Ensure baseUrl doesn't leave a trailing slash before appending /auth/login/
+      const baseUrl = API_BASE.replace(/\/$/, '');
+
+      const response = await fetch(`${baseUrl}/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: loginUsername, password: loginPassword }),
-      })
+      });
+
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail || 'Login failed')
+        throw new Error(data.detail || 'Login failed');
       }
 
-      const data = await response.json()
-      const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin'
-      setRole(normalizedRole)
-      setAuth({ token: data.access, user: { username: data.username, role: data.role } })
+      const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin';
+      setRole(normalizedRole);
+      setAuth({ token: data.access, user: { username: data.username, role: data.role } });
+
     } catch (error) {
-      setLoginError(error.message)
+      setLoginError(error.message);
     } finally {
-      setLoginLoading(false)
+      setLoginLoading(false);
     }
   }
 
@@ -351,16 +355,28 @@ function App() {
     setAnalyticsData(analytics)
   }
 
+
   useEffect(() => {
     const interval = window.setInterval(() => {
       setRadarPulse((value) => (value >= 96 ? 61 : value + 3))
       setConnection((value) => (value === 'online' ? 'online' : 'online'))
+
       setAlerts((current) => {
+        // 🟢 GUARD: If there are no alerts yet, return current state unchanged
+        if (!current || current.length === 0) return current
+
         const next = [...current]
         const index = Math.floor(Date.now() / 3500) % next.length
+
+        // 🟢 GUARD: Ensure the target alert exists
+        if (!next[index]) return current
+
         next[index] = {
           ...next[index],
-          confidence: Math.min(98, next[index].confidence + (index % 2 === 0 ? 1 : 0)),
+          confidence: Math.min(
+            98,
+            (next[index].confidence ?? 0) + (index % 2 === 0 ? 1 : 0)
+          ),
         }
         return next
       })
