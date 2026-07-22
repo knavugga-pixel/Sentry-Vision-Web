@@ -6,5 +6,8 @@
     "build": "npm --prefix my-react-app run build",
     "lint": "npm --prefix my-react-app run lint",
     "preview": "npm --prefix my-react-app run preview"
+  },
+  "dependencies": {
+    "axios": "^1.18.1"
   }
 }

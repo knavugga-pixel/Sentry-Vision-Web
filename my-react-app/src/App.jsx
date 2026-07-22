@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_BASE = "https://sentry-vision-backend.onrender.com/api";
+const API_BASE = "https://sentry-vision-backend.onrender.com/api"
 const AUTH_STORAGE_KEY = 'sentryVisionAuth'
 
 const navItems = [
@@ -119,7 +119,8 @@ const deviceHealth = [
     name: 'ESP32-CAM',
     status: 'online',
     heartbeat: '7 sec ago',
-    power: 'PoE adapter stable',
+    firmwareVersion: 'v1.4.2',
+    ipAddress: '192.168.1.105',
     sd: 68,
     temp: '42 C',
   },
@@ -127,7 +128,8 @@ const deviceHealth = [
     name: 'Arduino Uno',
     status: 'online',
     heartbeat: '11 sec ago',
-    power: 'USB regulated',
+    firmwareVersion: 'v2.0.1',
+    ipAddress: '192.168.1.108',
     sd: null,
     temp: '36 C',
   },
@@ -135,7 +137,8 @@ const deviceHealth = [
     name: 'Radar Node',
     status: 'degraded',
     heartbeat: '41 sec ago',
-    power: 'Battery 38%',
+    firmwareVersion: 'v0.9.8',
+    ipAddress: '192.168.1.112',
     sd: 22,
     temp: '39 C',
   },
@@ -158,6 +161,7 @@ const analytics = {
     { label: '16-20', value: 33 },
     { label: '20-24', value: 47 },
   ],
+  falsePositiveRate: 4.2,
 }
 
 const blankPerson = {
@@ -193,7 +197,7 @@ function App() {
   })
   const [auth, setAuth] = useState(() => {
     try {
-      const saved = window.localStorage.getItem('sentryVisionAuth')
+      const saved = window.localStorage.getItem(AUTH_STORAGE_KEY)
       return saved ? JSON.parse(saved) : { token: null, user: null }
     } catch {
       return { token: null, user: null }
@@ -308,42 +312,40 @@ function App() {
 
   useEffect(() => {
     if (!auth?.token) {
-      window.localStorage.removeItem('sentryVisionAuth')
+      window.localStorage.removeItem(AUTH_STORAGE_KEY)
       return
     }
 
-    window.localStorage.setItem('sentryVisionAuth', JSON.stringify(auth))
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth))
   }, [auth])
 
   async function handleLogin(event) {
-    event.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
+    event.preventDefault()
+    setLoginLoading(true)
+    setLoginError('')
 
     try {
-      // Ensure baseUrl doesn't leave a trailing slash before appending /auth/login/
-      const baseUrl = API_BASE.replace(/\/$/, '');
+      const baseUrl = API_BASE.replace(/\/$/, '')
 
       const response = await fetch(`${baseUrl}/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: loginUsername, password: loginPassword }),
-      });
+      })
 
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Login failed');
+        throw new Error(data.detail || 'Login failed')
       }
 
-      const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin';
-      setRole(normalizedRole);
-      setAuth({ token: data.access, user: { username: data.username, role: data.role } });
-
+      const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin'
+      setRole(normalizedRole)
+      setAuth({ token: data.access, user: { username: data.username, role: data.role } })
     } catch (error) {
-      setLoginError(error.message);
+      setLoginError(error.message)
     } finally {
-      setLoginLoading(false);
+      setLoginLoading(false)
     }
   }
 
@@ -355,20 +357,17 @@ function App() {
     setAnalyticsData(analytics)
   }
 
-
   useEffect(() => {
     const interval = window.setInterval(() => {
       setRadarPulse((value) => (value >= 96 ? 61 : value + 3))
       setConnection((value) => (value === 'online' ? 'online' : 'online'))
 
       setAlerts((current) => {
-        // 🟢 GUARD: If there are no alerts yet, return current state unchanged
         if (!current || current.length === 0) return current
 
         const next = [...current]
         const index = Math.floor(Date.now() / 3500) % next.length
 
-        // 🟢 GUARD: Ensure the target alert exists
         if (!next[index]) return current
 
         next[index] = {
@@ -534,6 +533,9 @@ function App() {
           <div className="topbar-actions">
             <span className={`connection-pill ${connection}`}>{connection}</span>
             <span className="clock">14 Jul 2026 / 11:48 EAT</span>
+            <button className="secondary-button logout-btn" type="button" onClick={handleLogout}>
+              Logout
+            </button>
           </div>
         </header>
 
@@ -573,8 +575,8 @@ function App() {
           />
         )}
         {activePage === 'radar' && <RadarPage pulse={radarPulse} />}
-        {activePage === 'health' && <DeviceHealthPage devices={deviceHealth} />}
-        {activePage === 'analytics' && <AnalyticsPage data={analytics} />}
+        {activePage === 'health' && <DeviceHealthPage devices={devices} />}
+        {activePage === 'analytics' && <AnalyticsPage data={analyticsData} />}
         {activePage === 'settings' && (
           <SettingsPage isAdmin={isAdmin} settings={settings} onChange={setSettings} />
         )}
@@ -649,6 +651,10 @@ function StatusMetric({ label, value, state }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+function StatusBadge({ status }) {
+  return <span className={`status-badge ${status}`}>{status}</span>
 }
 
 function DetectionFeed({ alerts }) {
@@ -919,7 +925,7 @@ function PersonPhoto({ person }) {
 
   return (
     <div className="person-photo placeholder" aria-label={`${person.name} placeholder`}>
-      <span>{person.name.slice(0, 2).toUpperCase()}</span>
+      <span>{person.name ? person.name.slice(0, 2).toUpperCase() : '??'}</span>
     </div>
   )
 }
@@ -1011,12 +1017,9 @@ function DeviceHealthPage({ devices }) {
             {device.sd === null ? (
               <DetailItem label="SD card usage" value="Not installed" />
             ) : (
-              <div className="detail-item full">
-                <span>SD card usage</span>
-                <strong>{device.sd}%</strong>
-                <meter min="0" max="100" value={device.sd} />
-              </div>
+              <DetailItem label="SD card usage" value={`${device.sd}%`} />
             )}
+            <DetailItem label="Node type/temp" value={device.temp} />
           </div>
         </section>
       ))}
@@ -1027,225 +1030,85 @@ function DeviceHealthPage({ devices }) {
 function AnalyticsPage({ data }) {
   return (
     <div className="page-grid analytics-grid">
-      <section className="panel chart-panel">
+      <section className="panel metric-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Polling Analytics</p>
-            <h3>Detections Per Day</h3>
+            <p className="eyebrow">Overview</p>
+            <h3>Detection Frequency</h3>
           </div>
         </div>
-        <BarChart values={data.detections} labels={['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']} />
+        <div className="bar-chart">
+          {data.detections.map((count, index) => (
+            <div key={index} className="bar-column">
+              <div className="bar-fill" style={{ height: `${Math.min(100, count * 2)}%` }} />
+              <span>Day {index + 1}</span>
+            </div>
+          ))}
+        </div>
       </section>
-      <section className="panel chart-panel">
+
+      <section className="panel summary-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Model Quality</p>
-            <h3>False-Positive Rate</h3>
+            <p className="eyebrow">Metrics</p>
+            <h3>System Performance</h3>
           </div>
-          <strong className="large-metric">6.8%</strong>
         </div>
-        <LineChart values={[12, 10, 9, 8, 7, 7, 6.8]} />
+        <div className="detail-grid">
+          <DetailItem label="False positive rate" value={`${data.falsePositiveRate}%`} />
+          <DetailItem label="Busiest zone" value={data.zones[0]?.label || 'N/A'} />
+          <DetailItem label="Peak activity hour" value={data.times[0]?.label || 'N/A'} />
+        </div>
       </section>
-      <section className="panel chart-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Busiest Zones</p>
-            <h3>Zone Load</h3>
-          </div>
-        </div>
-        <RankList items={data.zones} />
-      </section>
-      <section className="panel chart-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Busiest Times</p>
-            <h3>24-Hour Activity</h3>
-          </div>
-        </div>
-        <BarChart values={data.times.map((item) => item.value)} labels={data.times.map((item) => item.label)} />
-      </section>
-    </div>
-  )
-}
-
-function BarChart({ values, labels }) {
-  const max = Math.max(...values)
-  return (
-    <div className="bar-chart">
-      {values.map((value, index) => (
-        <div className="bar-column" key={`${labels[index]}-${value}`}>
-          <span style={{ height: `${(value / max) * 100}%` }} />
-          <small>{labels[index]}</small>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function LineChart({ values }) {
-  const max = Math.max(...values)
-  const min = Math.min(...values)
-  const points = values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * 100
-      const y = 90 - ((value - min) / (max - min || 1)) * 70
-      return `${x},${y}`
-    })
-    .join(' ')
-
-  return (
-    <svg className="line-chart" viewBox="0 0 100 100" role="img" aria-label="False-positive rate trend">
-      <polyline points={points} />
-    </svg>
-  )
-}
-
-function RankList({ items }) {
-  const max = Math.max(...items.map((item) => item.value))
-  return (
-    <div className="rank-list">
-      {items.map((item) => (
-        <div className="rank-item" key={item.label}>
-          <span>{item.label}</span>
-          <div>
-            <i style={{ width: `${(item.value / max) * 100}%` }} />
-          </div>
-          <strong>{item.value}</strong>
-        </div>
-      ))}
     </div>
   )
 }
 
 function SettingsPage({ isAdmin, settings, onChange }) {
-  function updateSetting(key, value) {
-    if (!isAdmin) return
-    onChange({ ...settings, [key]: value })
-  }
-
   return (
     <section className="panel page-panel settings-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">System Controls</p>
-          <h3>Detection Thresholds and Roles</h3>
+          <p className="eyebrow">Configuration</p>
+          <h3>System Settings</h3>
         </div>
-        {!isAdmin && <span className="permission-pill">Read-only</span>}
       </div>
-
-      <div className="settings-grid">
-        <SettingsRange
-          disabled={!isAdmin}
-          label="Facial match threshold"
-          max="100"
-          min="50"
-          onChange={(value) => updateSetting('faceThreshold', value)}
-          suffix="%"
-          value={settings.faceThreshold}
-        />
-        <SettingsRange
-          disabled={!isAdmin}
-          label="Wi-Fi radar sensitivity"
-          max="100"
-          min="20"
-          onChange={(value) => updateSetting('radarSensitivity', value)}
-          suffix="%"
-          value={settings.radarSensitivity}
-        />
-        <SettingsRange
-          disabled={!isAdmin}
-          label="Ultrasonic trigger range"
-          max="400"
-          min="80"
-          onChange={(value) => updateSetting('ultrasonicRange', value)}
-          suffix=" cm"
-          value={settings.ultrasonicRange}
-        />
-        <SettingsRange
-          disabled={!isAdmin}
-          label="Evidence retention"
-          max="180"
-          min="7"
-          onChange={(value) => updateSetting('retentionDays', value)}
-          suffix=" days"
-          value={settings.retentionDays}
-        />
-      </div>
-
-      <div className="settings-section">
-        <h4>Alert Channels</h4>
-        <label className="toggle-row">
+      {!isAdmin && <p className="permission-note">Viewers cannot modify system thresholds.</p>}
+      <form className="settings-form">
+        <label>
+          <span>Face Match Threshold ({settings.faceThreshold}%)</span>
           <input
+            type="range"
+            min="50"
+            max="99"
+            disabled={!isAdmin}
+            value={settings.faceThreshold}
+            onChange={(e) => onChange({ ...settings, faceThreshold: Number(e.target.value) })}
+          />
+        </label>
+        <label>
+          <span>Radar Sensitivity ({settings.radarSensitivity}%)</span>
+          <input
+            type="range"
+            min="10"
+            max="100"
+            disabled={!isAdmin}
+            value={settings.radarSensitivity}
+            onChange={(e) => onChange({ ...settings, radarSensitivity: Number(e.target.value) })}
+          />
+        </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            disabled={!isAdmin}
             checked={settings.notifySms}
-            disabled={!isAdmin}
-            type="checkbox"
-            onChange={(event) => updateSetting('notifySms', event.target.checked)}
+            onChange={(e) => onChange({ ...settings, notifySms: e.target.checked })}
           />
-          <span>SMS escalation</span>
+          <span>Send SMS Alerts for Critical Incidents</span>
         </label>
-        <label className="toggle-row">
-          <input
-            checked={settings.notifyEmail}
-            disabled={!isAdmin}
-            type="checkbox"
-            onChange={(event) => updateSetting('notifyEmail', event.target.checked)}
-          />
-          <span>Email incident digest</span>
-        </label>
-        <label className="toggle-row">
-          <input
-            checked={settings.notifySirens}
-            disabled={!isAdmin}
-            type="checkbox"
-            onChange={(event) => updateSetting('notifySirens', event.target.checked)}
-          />
-          <span>Local siren relay</span>
-        </label>
-      </div>
-
-      <div className="settings-section">
-        <h4>User Roles</h4>
-        <div className="role-matrix">
-          <span>Capability</span>
-          <span>Admin</span>
-          <span>Security Viewer</span>
-          <span>CRUD POIs and settings</span>
-          <strong>Allowed</strong>
-          <strong>Blocked</strong>
-          <span>Acknowledge alerts</span>
-          <strong>Allowed</strong>
-          <strong>Allowed</strong>
-          <span>Dismiss incidents</span>
-          <strong>Allowed</strong>
-          <strong>Blocked</strong>
-        </div>
-      </div>
+      </form>
     </section>
   )
-}
-
-function SettingsRange({ disabled, label, max, min, onChange, suffix, value }) {
-  return (
-    <label className="settings-range">
-      <span>{label}</span>
-      <strong>
-        {value}
-        {suffix}
-      </strong>
-      <input
-        disabled={disabled}
-        max={max}
-        min={min}
-        type="range"
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </label>
-  )
-}
-
-function StatusBadge({ status }) {
-  return <span className={`status-badge ${status}`}>{status}</span>
 }
 
 export default App
