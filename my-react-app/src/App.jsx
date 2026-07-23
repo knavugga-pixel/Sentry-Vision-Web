@@ -339,7 +339,6 @@ function App() {
         throw new Error(data.detail || 'Login failed')
       }
 
-<<<<<<< HEAD
       if (data.access) {
         localStorage.setItem('access_token', data.access)
         if (data.refresh) {
@@ -355,26 +354,6 @@ function App() {
         await loadBackendData()
       }
 
-=======
-      if (!data.access) {
-        throw new Error('Login succeeded but no access token was returned.')
-      }
-
-      const newAuth = {
-        token: data.access,
-        refreshToken: data.refresh || null,
-        user: { username: data.username, role: data.role },
-      }
-
-      setAuth(newAuth)
-      setRole(data.role || 'Admin')
-
-      // No manual data-reload call needed here — the useEffect watching
-      // `isAuthenticated` (line ~221) already fires automatically once
-      // setAuth() above flips isAuthenticated to true. The existing
-      // useEffect watching `auth` (line ~313) also persists this whole
-      // object to localStorage under AUTH_STORAGE_KEY.
->>>>>>> c343450 (Changes to App.jsx)
     } catch (error) {
       setLoginError(error.message)
     } finally {
