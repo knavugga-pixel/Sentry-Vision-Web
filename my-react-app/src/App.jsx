@@ -339,9 +339,21 @@ function App() {
         throw new Error(data.detail || 'Login failed')
       }
 
-      const normalizedRole = data.role === 'viewer' ? 'Security Viewer' : 'Admin'
-      setRole(normalizedRole)
-      setAuth({ token: data.access, user: { username: data.username, role: data.role } })
+      if (data.access) {
+        localStorage.setItem('access_token', data.access)
+        if (data.refresh) {
+          localStorage.setItem('refresh_token', data.refresh)
+        }
+      } else if (data.token) {
+        // Fallback if your endpoint returns key as "token" instead of "access"
+        localStorage.setItem('access_token', data.token)
+      }
+
+      // 2. Trigger data reload or state update so protected endpoints fetch data now
+      if (typeof loadBackendData === 'function') {
+        await loadBackendData()
+      }
+
     } catch (error) {
       setLoginError(error.message)
     } finally {
