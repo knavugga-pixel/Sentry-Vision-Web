@@ -203,12 +203,8 @@ function App() {
     }
   })
   const [role, setRole] = useState(() => auth?.user?.role || 'Admin')
-  const [loginUsername, setLoginUsername] = useState('admin')
-  const [loginPassword, setLoginPassword] = useState('Password123!')
-  const [loginError, setLoginError] = useState('')
-  const [loginLoading, setLoginLoading] = useState(false)
 
-  const isAuthenticated = Boolean(auth?.token)
+  const isAuthenticated = true
   const authHeaders = auth?.token ? { Authorization: `Bearer ${auth.token}` } : {}
 
   const isAdmin = role === 'Admin'
@@ -319,48 +315,6 @@ function App() {
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth))
   }, [auth])
 
-  async function handleLogin(event) {
-    event.preventDefault()
-    setLoginLoading(true)
-    setLoginError('')
-
-    try {
-      const baseUrl = API_BASE.replace(/\/$/, '')
-
-      const response = await fetch(`${baseUrl}/auth/login/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
-      })
-
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Login failed')
-      }
-
-      if (data.access) {
-        localStorage.setItem('access_token', data.access)
-        if (data.refresh) {
-          localStorage.setItem('refresh_token', data.refresh)
-        }
-      } else if (data.token) {
-        // Fallback if your endpoint returns key as "token" instead of "access"
-        localStorage.setItem('access_token', data.token)
-      }
-
-      // 2. Trigger data reload or state update so protected endpoints fetch data now
-      if (typeof loadBackendData === 'function') {
-        await loadBackendData()
-      }
-
-    } catch (error) {
-      setLoginError(error.message)
-    } finally {
-      setLoginLoading(false)
-    }
-  }
-
   function handleLogout() {
     setAuth({ token: null, user: null })
     setRole('Admin')
@@ -401,43 +355,6 @@ function App() {
     () => navItems.find((item) => item.id === activePage)?.label ?? 'Dashboard',
     [activePage],
   )
-
-  if (!isAuthenticated) {
-    return (
-      <div className="login-shell">
-        <section className="login-panel">
-          <h1>SENTRY-VISION Login</h1>
-          <p>Use the backend admin account to connect frontend and backend.</p>
-          <form onSubmit={handleLogin}>
-            <label>
-              Username
-              <input
-                value={loginUsername}
-                onChange={(event) => setLoginUsername(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-                required
-              />
-            </label>
-            <button className="primary-button" type="submit" disabled={loginLoading}>
-              {loginLoading ? 'Logging in…' : 'Log in'}
-            </button>
-            {loginError && <p className="error-text">{loginError}</p>}
-          </form>
-          <p>
-            Demo credentials: <strong>admin / Password123!</strong>
-          </p>
-        </section>
-      </div>
-    )
-  }
 
   function updateAlertStatus(alertId, status) {
     setAlerts((current) =>
